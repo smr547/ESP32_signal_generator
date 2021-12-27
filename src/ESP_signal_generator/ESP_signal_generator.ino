@@ -19,8 +19,6 @@ struct SwitchState {
   byte state;
 };
 
-// struct SwitchState sw1 = {0, 0x00};
-
 struct SwitchState switches[] = {
         {"sw0", 16, 0x00},
         {"sw1", 17, 0x00},
@@ -30,6 +28,28 @@ struct SwitchState switches[] = {
         {"sw5", 33, 0x00},
         {"sw6", 27, 0x00},
         {"sw7", 14, 0x00}
+};
+
+// PWM channels
+
+struct PwmState {
+  char const * id;
+  char channelName[16];
+  uint8_t pin;
+  uint64_t frequency;
+  uint16_t resolution;
+  uint8_t duty;
+};
+
+struct PwmState pwmChannel[] = {
+  {"H0","unnamed", 23, 0, 8, 0},
+  {"H2","unnamed", 22, 0, 8, 0},
+  {"H4","unnamed", 1, 0, 8, 0},
+  {"H6","unnamed", 3, 0, 8, 0},
+  {"L0","unnamed", 4, 0, 8, 0},
+  {"L2","unnamed", 0, 0, 8, 0},
+  {"L4","unnamed", 2, 0, 8, 0},
+  {"L6","unnamed", 15, 0, 8, 0},
 };
      
 
@@ -154,7 +174,7 @@ void loop(){
 
             // display a table of switches
 
-            client.println(F("<h2>Switches</h2>"));
+            client.println(F("<p>Switches</p>"));
             client.println(F("<table><tr><th>id</th><th>Pin</th><th>State</th><th>Action</th></tr>"));
             for (int i=0; i < 8; i++) {
               client.print(F("<tr><td>"));
@@ -175,8 +195,65 @@ void loop(){
               client.print(switches[i].id);
               client.print(F("/toggle\"><input type=\"submit\" value=\"Toggle\" formmethod=\"get\"></form>"));
               client.println(F("</td></tr>"));
+            }
+            client.print(F("</table>"));
+
+
+            // display table of PWM channels
+            client.println(F("<p>PWM Channels</p>"));
+            client.println(F("<table><tr><th>id</th><th>Pin</th><th></th><th>Name</th><th>Frequency</th><th>Resolution</th><th>Duty</th><th>Action</th></tr>"));
+
+            // char form[8] = "";
+            for (int i=0; i < 8; i++) {
+              char const * id = pwmChannel[i].id;
+             // sprintf(form, "form%d", i);
+              client.print(F("<tr><td>"));
+              client.print(id);
+              client.print(F("</td><td>"));
+              client.print(pwmChannel[i].pin);
+              client.print(F("</td><td>"));
+              client.print(F("<form id =\""));
+              client.print(id);
+              client.print(F("\" formaction=\"get\" action=\"/"));
+              client.print(id);
+              client.print(F("\"><input type=\"hidden\" name=\"id\" value=\"1\" /></form></td><td>"));
+
+              // channel name input
+              client.print(F("<input form=\""));
+              client.print(id);
+              client.print(F("\" type=\"text\" name=\"chName\" value=\""));
+              client.print(pwmChannel[i].channelName);
+              client.print(F("\" /></td><td>"));
+
               
-             
+              // frequency input
+              client.print(F("<input form=\""));
+              client.print(id);
+              client.print(F("\" type=\"text\" name=\"frequency\" value=\""));
+              client.print(pwmChannel[i].frequency);
+              client.print(F("\" /></td><td>"));
+
+              
+              // resolution input
+              client.print(F("<input form=\""));
+              client.print(id);
+              client.print(F("\" type=\"text\" name=\"resolution\" value=\""));
+              client.print(pwmChannel[i].resolution);
+              client.print(F("\" /></td><td>"));
+
+              
+              // duty input
+              client.print(F("<input form=\""));
+              client.print(id);
+              client.print(F("\" type=\"text\" name=\"duty\" value=\""));
+              client.print(pwmChannel[i].duty);
+              client.print(F("\" /></td><td>"));
+
+              
+              // Update button
+              client.print(F("<input form=\""));
+              client.print(id);
+              client.print(F("\" type=\"submit\" value=\"Update\" /></td></tr>"));
             }
             client.print(F("</table>"));
             
