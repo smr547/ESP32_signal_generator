@@ -6,9 +6,10 @@
 // Load Wi-Fi library
 #include <WiFi.h>
 
+#include "secrets.h"
 // Replace with your network credentials
-const char* ssid = "Bertie";
-const char* password = "Ookie1234";
+const char* ssid = SECRET_SSID;
+const char* password = SECRET_WIFI_PASSWORD;
 
 // Set web server port number to 80
 WiFiServer server(80);
@@ -54,6 +55,19 @@ struct PwmState pwmChannel[] = {
   {14, "L6", "unnamed", 15, 0, 8, 0},
 };
 
+// Two DAC channels
+
+struct DacState {
+  const uint8_t channel;
+  const uint8_t pin;
+  uint8_t value;
+};
+
+struct DacState dacChannel[] = {
+  {0, 25, 0},
+  {1, 26, 0}
+};
+
 
 // Variable to store the HTTP request
 
@@ -90,6 +104,10 @@ int16_t indexOf(Buffer &aBuff, const char * aString) {
 void clearBuff(Buffer &aBuff) {
   aBuff.buff[0] = '\0';
   aBuff.len = 0;
+}
+
+void setDacPin(DacState &ds) {
+  dacWrite(ds.pin, ds.value);
 }
 
 void setPwmPin(PwmState &pwms) {
