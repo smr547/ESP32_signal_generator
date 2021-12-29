@@ -1,6 +1,6 @@
 /*********
   Rui Santos
-  Complete project details at http://randomnerdtutorials.com  
+  Complete project details at http://randomnerdtutorials.com
 *********/
 
 // Load Wi-Fi library
@@ -20,21 +20,23 @@ struct SwitchState {
 };
 
 struct SwitchState switches[] = {
-        {"sw0", 16, 0x00},
-        {"sw1", 17, 0x00},
-        {"sw2", 18, 0x00},
-        {"sw3", 19, 0x00},
-        {"sw4", 32, 0x00},
-        {"sw5", 33, 0x00},
-        {"sw6", 27, 0x00},
-        {"sw7", 14, 0x00}
+  {"sw0", 16, 0x00},
+  {"sw1", 17, 0x00},
+  {"sw2", 18, 0x00},
+  {"sw3", 19, 0x00},
+  {"sw4", 32, 0x00},
+  {"sw5", 33, 0x00},
+  {"sw6", 27, 0x00},
+  {"sw7", 14, 0x00}
 };
 
 // PWM channels
 
+#define CHNLEN 16
 struct PwmState {
+  const int channel;
   char const * id;
-  char channelName[16];
+  char channelName[CHNLEN];
   uint8_t pin;
   uint64_t frequency;
   uint16_t resolution;
@@ -42,47 +44,157 @@ struct PwmState {
 };
 
 struct PwmState pwmChannel[] = {
-  {"H0","unnamed", 23, 0, 8, 0},
-  {"H2","unnamed", 22, 0, 8, 0},
-  {"H4","unnamed", 1, 0, 8, 0},
-  {"H6","unnamed", 3, 0, 8, 0},
-  {"L0","unnamed", 4, 0, 8, 0},
-  {"L2","unnamed", 0, 0, 8, 0},
-  {"L4","unnamed", 2, 0, 8, 0},
-  {"L6","unnamed", 15, 0, 8, 0},
+  {0, "H0", "unnamed", 23, 0, 8, 0},
+  {2, "H2", "unnamed", 22, 0, 8, 0},
+  {4, "H4", "unnamed", 1, 0, 8, 0},
+  {6, "H6", "unnamed", 3, 0, 8, 0},
+  {8, "L0", "unnamed", 4, 0, 8, 0},
+  {10, "L2", "unnamed", 0, 0, 8, 0},
+  {12, "L4", "unnamed", 2, 0, 8, 0},
+  {14, "L6", "unnamed", 15, 0, 8, 0},
 };
-     
+
 
 // Variable to store the HTTP request
-String header;
 
-// Auxiliar variables to store the current output state
-String output26State = "off";
-String output27State = "off";
+#define BUFLEN 128
+struct Buffer {
+  char buff[BUFLEN];  // array of characters
+  uint16_t maxlen;    // maximum length
+  uint16_t len;       // current len
+};
 
-// Assign output variables to GPIO pins
-const int output26 = 26;
-const int output27 = 27;
+uint8_t appendChar(Buffer &aBuff, const char c) {
+  if (aBuff.len < aBuff.maxlen) {
+    aBuff.buff[aBuff.len] = c;
+    aBuff.len++;
+    aBuff.buff[aBuff.len] = '\0';
+    return 0;
+  }
+  return 1;
+}
+
+int16_t indexOf(Buffer &aBuff, const char * aString) {
+  const char * ptr = strstr(aBuff.buff, aString);
+
+  Serial.println("");
+  Serial.printf("Checking for '%s' in '%s'\n", aString, aBuff.buff);
+  Serial.printf("strstr return %d\n", (long) ptr);
+  
+  if (ptr == NULL) {
+    return -1;
+  }
+  return (int16_t) (ptr - aBuff.buff);
+}
+
+void clearBuff(Buffer &aBuff) {
+  aBuff.buff[0] = '\0';
+  aBuff.len = 0;
+}
+
+void setPwmPin(PwmState &pwms) {
+  ledcSetup(pwms.channel, pwms.frequency, pwms.resolution);
+  ledcAttachPin(pwms.pin, pwms.channel);
+  ledcWrite(pwms.channel, pwms.duty);
+}
+
+int processPwmUpdate(Buffer &cmd, PwmState &pwms) {
+  // locate all the required parameters
+  // ensure they are present and in range
+  // update the state table entry
+  // adjust the hardware settings
+
+  // return 0 if OK, or
+  // return positive error number
+
+
+  // locate all required paremeters
+
+  char * chName;  // channel name
+  uint64_t f;     // frequency
+  uint16_t r;     // resolution
+  uint8_t d;      // duty
+
+
+  Serial.print("Processing state change for PWM channel ");
+  Serial.print(pwms.id);
+  Serial.println("");
+  
+  char * ptr = cmd.buff;
+  char * field[5];
+  for (int i = 0; i < 5; i++) {
+    // look for next "=" delimiter
+    ptr = strstr(ptr, "=");
+    if (ptr == NULL) {
+      return i * 2 + 1;
+    }
+    ptr++;
+    field[i] = ptr;
+  }
+  
+  chName = field[1];
+
+  f = atoi(field[2]);
+
+  // 0 <= r <= 16
+  
+  r = atoi(field[3]);
+  
+  if (r > 16) {
+    r = 16;
+  }
+  if (r < 0) {
+    r=0;
+  }
+
+  // 0 <= d <= 100
+
+  d = atoi(field[4]);
+  
+  if (d < 0) {
+    d = 0;
+  }
+  if (d > 100) {
+    d = 100;
+  }
+  
+
+  // copy channel name
+  
+  for (int i = 0; i< (CHNLEN-1); i++) {
+    if (chName[i] == '\0' || chName[i] == '&') {
+      break;
+    }
+    pwms.channelName[i] = chName[i];
+    pwms.channelName[i+1] = '\0';
+  }
+
+  // copy in integer parameters
+  
+  pwms.frequency = f;
+  pwms.resolution = r;
+  pwms.duty = d;
+
+  return 0;
+}
+
+struct Buffer header = {"", BUFLEN-1, 0};
+struct Buffer currentLine = {"", BUFLEN-1, 0};
+
 
 // Current time
 unsigned long currentTime = millis();
 // Previous time
-unsigned long previousTime = 0; 
+unsigned long previousTime = 0;
 // Define timeout time in milliseconds (example: 2000ms = 2s)
 const long timeoutTime = 2000;
 
 void setup() {
   Serial.begin(115200);
-  // Initialize the output variables as outputs
-  pinMode(output26, OUTPUT);
-  pinMode(output27, OUTPUT);
-  // Set outputs to LOW
-  digitalWrite(output26, LOW);
-  digitalWrite(output27, LOW);
 
   // set switches
 
-  for (int i=0; i < 8; i++) {
+  for (int i = 0; i < 8; i++) {
     pinMode(switches[i].pin, OUTPUT);
     digitalWrite(switches[i].pin, switches[i].state);
   }
@@ -103,24 +215,24 @@ void setup() {
   server.begin();
 }
 
-void loop(){
+void loop() {
   WiFiClient client = server.available();   // Listen for incoming clients
 
   if (client) {                             // If a new client connects,
     currentTime = millis();
     previousTime = currentTime;
     Serial.println("New Client.");          // print a message out in the serial port
-    String currentLine = "";                // make a String to hold incoming data from the client
+    clearBuff(currentLine);                // make a String to hold incoming data from the client
     while (client.connected() && currentTime - previousTime <= timeoutTime) {  // loop while the client's connected
       currentTime = millis();
       if (client.available()) {             // if there's bytes to read from the client,
         char c = client.read();             // read a byte, then
         Serial.write(c);                    // print it out the serial monitor
-        header += c;
+        appendChar(header, c);
         if (c == '\n') {                    // if the byte is a newline character
           // if the current line is blank, you got two newline characters in a row.
           // that's the end of the client HTTP request, so send a response:
-          if (currentLine.length() == 0) {
+          if (currentLine.len == 0) {
             // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
             // and a content-type so the client knows what's coming, then a blank line:
             client.println("HTTP/1.1 200 OK");
@@ -128,47 +240,40 @@ void loop(){
             client.println("Connection: close");
             client.println();
 
-            Serial.println(header);
-            
-            // turns the GPIOs on and off
-            if (header.indexOf("GET /26/on") >= 0) {
-              Serial.println("GPIO 26 on");
-              output26State = "on";
-              digitalWrite(output26, HIGH);
-            } else if (header.indexOf("GET /26/off") >= 0) {
-              Serial.println("GPIO 26 off");
-              output26State = "off";
-              digitalWrite(output26, LOW);
-            } else if (header.indexOf("GET /27/on") >= 0) {
-              Serial.println("GPIO 27 on");
-              output27State = "on";
-              digitalWrite(output27, HIGH);
-            } else if (header.indexOf("GET /27/off") >= 0) {
-              Serial.println("GPIO 27 off");
-              output27State = "off";
-              digitalWrite(output27, LOW);
-            } else {
-              char buf[16];
-              for (int i = 0; i< 8; i++) {
-                sprintf(buf, "GET /%s/toggle", switches[i].id);
-                if (header.indexOf(buf) >= 0) {
-                  switches[i].state = switches[i].state ^ 0x01;
-                  digitalWrite(switches[i].pin, switches[i].state);
+            Serial.println(header.buff);
+
+            char buf[16];
+            for (int i = 0; i < 8; i++) {
+              sprintf(buf, "GET /%s/toggle", switches[i].id);
+              if (indexOf(header, buf) >= 0) {
+                switches[i].state = switches[i].state ^ 0x01;
+                digitalWrite(switches[i].pin, switches[i].state);
+                break;
+              }
+              sprintf(buf, "GET /%s?id=", pwmChannel[i].id);
+              Serial.printf("Checking for: ");
+              Serial.println(buf);
+              if (indexOf(header, buf) >= 0) {
+                if (processPwmUpdate(header, pwmChannel[i]) == 0) {
+                  // set PWM parameters
+                  setPwmPin(pwmChannel[i]);
                 }
+                break;
               }
             }
-            
+
+
             // Display the HTML web page
             client.println("<!DOCTYPE html><html>");
             client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
             client.println("<link rel=\"icon\" href=\"data:,\">");
-            // CSS to style the on/off buttons 
+            // CSS to style the on/off buttons
             // Feel free to change the background-color and font-size attributes to fit your preferences
             client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}");
             client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
             client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
             client.println(".button2 {background-color: #555555;}</style></head>");
-            
+
             // Web Page Heading
             client.println("<body><h1>ESP32 Signal Generator</h1>");
 
@@ -176,7 +281,7 @@ void loop(){
 
             client.println(F("<p>Switches</p>"));
             client.println(F("<table><tr><th>id</th><th>Pin</th><th>State</th><th>Action</th></tr>"));
-            for (int i=0; i < 8; i++) {
+            for (int i = 0; i < 8; i++) {
               client.print(F("<tr><td>"));
               client.print(switches[i].id);
               client.print(F("</td><td>"));
@@ -204,9 +309,9 @@ void loop(){
             client.println(F("<table><tr><th>id</th><th>Pin</th><th></th><th>Name</th><th>Frequency</th><th>Resolution</th><th>Duty</th><th>Action</th></tr>"));
 
             // char form[8] = "";
-            for (int i=0; i < 8; i++) {
+            for (int i = 0; i < 8; i++) {
               char const * id = pwmChannel[i].id;
-             // sprintf(form, "form%d", i);
+              // sprintf(form, "form%d", i);
               client.print(F("<tr><td>"));
               client.print(id);
               client.print(F("</td><td>"));
@@ -225,7 +330,7 @@ void loop(){
               client.print(pwmChannel[i].channelName);
               client.print(F("\" /></td><td>"));
 
-              
+
               // frequency input
               client.print(F("<input form=\""));
               client.print(id);
@@ -233,7 +338,7 @@ void loop(){
               client.print(pwmChannel[i].frequency);
               client.print(F("\" /></td><td>"));
 
-              
+
               // resolution input
               client.print(F("<input form=\""));
               client.print(id);
@@ -241,7 +346,7 @@ void loop(){
               client.print(pwmChannel[i].resolution);
               client.print(F("\" /></td><td>"));
 
-              
+
               // duty input
               client.print(F("<input form=\""));
               client.print(id);
@@ -249,47 +354,28 @@ void loop(){
               client.print(pwmChannel[i].duty);
               client.print(F("\" /></td><td>"));
 
-              
+
               // Update button
               client.print(F("<input form=\""));
               client.print(id);
               client.print(F("\" type=\"submit\" value=\"Update\" /></td></tr>"));
             }
-            client.print(F("</table>"));
-            
-            // Display current state, and ON/OFF buttons for GPIO 26  
-            client.println("<p>GPIO 26 - State " + output26State + "</p>");
-            // If the output26State is off, it displays the ON button       
-            if (output26State=="off") {
-              client.println("<p><a href=\"/26/on\"><button class=\"button\">ON</button></a></p>");
-            } else {
-              client.println("<p><a href=\"/26/off\"><button class=\"button button2\">OFF</button></a></p>");
-            } 
-               
-            // Display current state, and ON/OFF buttons for GPIO 27  
-            client.println("<p>GPIO 27 - State " + output27State + "</p>");
-            // If the output27State is off, it displays the ON button       
-            if (output27State=="off") {
-              client.println("<p><a href=\"/27/on\"><button class=\"button\">ON</button></a></p>");
-            } else {
-              client.println("<p><a href=\"/27/off\"><button class=\"button button2\">OFF</button></a></p>");
-            }
-            client.println("</body></html>");
-            
+            client.print(F("</table></body></html>"));
+
             // The HTTP response ends with another blank line
             client.println();
             // Break out of the while loop
             break;
           } else { // if you got a newline, then clear currentLine
-            currentLine = "";
+            clearBuff(currentLine);
           }
         } else if (c != '\r') {  // if you got anything else but a carriage return character,
-          currentLine += c;      // add it to the end of the currentLine
+          appendChar(currentLine, c);      // add it to the end of the currentLine
         }
       }
     }
     // Clear the header variable
-    header = "";
+    clearBuff(header);
     // Close the connection
     client.stop();
     Serial.println("Client disconnected.");
