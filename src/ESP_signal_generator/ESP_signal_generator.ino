@@ -94,7 +94,7 @@ int16_t indexOf(Buffer &aBuff, const char * aString) {
   Serial.println("");
   Serial.printf("Checking for '%s' in '%s'\n", aString, aBuff.buff);
   Serial.printf("strstr return %d\n", (long) ptr);
-  
+
   if (ptr == NULL) {
     return -1;
   }
@@ -137,7 +137,7 @@ int processPwmUpdate(Buffer &cmd, PwmState &pwms) {
   Serial.print("Processing state change for PWM channel ");
   Serial.print(pwms.id);
   Serial.println("");
-  
+
   char * ptr = cmd.buff;
   char * field[5];
   for (int i = 0; i < 5; i++) {
@@ -149,46 +149,46 @@ int processPwmUpdate(Buffer &cmd, PwmState &pwms) {
     ptr++;
     field[i] = ptr;
   }
-  
+
   chName = field[1];
 
   f = atoi(field[2]);
 
   // 0 <= r <= 16
-  
+
   r = atoi(field[3]);
-  
+
   if (r > 16) {
     r = 16;
   }
   if (r < 0) {
-    r=0;
+    r = 0;
   }
 
   // 0 <= d <= 100
 
   d = atoi(field[4]);
-  
+
   if (d < 0) {
     d = 0;
   }
   if (d > 100) {
     d = 100;
   }
-  
+
 
   // copy channel name
-  
-  for (int i = 0; i< (CHNLEN-1); i++) {
+
+  for (int i = 0; i < (CHNLEN - 1); i++) {
     if (chName[i] == '\0' || chName[i] == '&') {
       break;
     }
     pwms.channelName[i] = chName[i];
-    pwms.channelName[i+1] = '\0';
+    pwms.channelName[i + 1] = '\0';
   }
 
   // copy in integer parameters
-  
+
   pwms.frequency = f;
   pwms.resolution = r;
   pwms.duty = d;
@@ -196,8 +196,8 @@ int processPwmUpdate(Buffer &cmd, PwmState &pwms) {
   return 0;
 }
 
-struct Buffer header = {"", BUFLEN-1, 0};
-struct Buffer currentLine = {"", BUFLEN-1, 0};
+struct Buffer header = {"", BUFLEN - 1, 0};
+struct Buffer currentLine = {"", BUFLEN - 1, 0};
 
 
 // Current time
@@ -206,6 +206,120 @@ unsigned long currentTime = millis();
 unsigned long previousTime = 0;
 // Define timeout time in milliseconds (example: 2000ms = 2s)
 const long timeoutTime = 2000;
+
+
+void sendResponseHTML(WiFiClient &client) {
+  // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+  // and a content-type so the client knows what's coming, then a blank line:
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-type:text/html");
+  client.println("Connection: close");
+  client.println();
+
+  // Display the HTML web page
+  client.println("<!DOCTYPE html><html>");
+  client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+  client.println("<link rel=\"icon\" href=\"data:,\">");
+  // CSS to style the on/off buttons
+  // Feel free to change the background-color and font-size attributes to fit your preferences
+  client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}");
+  client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
+  client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
+  client.println(".button2 {background-color: #555555;}</style></head>");
+
+  // Web Page Heading
+  client.println("<body><h1>ESP32 Signal Generator</h1>");
+
+  // display a table of switches
+
+  client.println(F("<p>Switches</p>"));
+  client.println(F("<table><tr><th>id</th><th>Pin</th><th>State</th><th>Action</th></tr>"));
+  for (int i = 0; i < 8; i++) {
+    client.print(F("<tr><td>"));
+    client.print(switches[i].id);
+    client.print(F("</td><td>"));
+    client.print(switches[i].pin);
+    client.print(F("</td><td>"));
+    if (switches[i].state == 0x00) {
+      client.print(F("OFF"));
+    } else {
+      client.print(F("ON"));
+    }
+
+    // toggle button
+
+    client.print(F("</td><td>"));
+    client.print(F("<form action=\"/"));
+    client.print(switches[i].id);
+    client.print(F("/toggle\"><input type=\"submit\" value=\"Toggle\" formmethod=\"get\"></form>"));
+    client.println(F("</td></tr>"));
+  }
+  client.print(F("</table>"));
+
+
+  // display table of PWM channels
+  client.println(F("<p>PWM Channels</p>"));
+  client.println(F("<table><tr><th>id</th><th>Pin</th><th></th><th>Name</th><th>Frequency</th><th>Resolution</th><th>Duty</th><th>Action</th></tr>"));
+
+  // char form[8] = "";
+  for (int i = 0; i < 8; i++) {
+    char const * id = pwmChannel[i].id;
+    // sprintf(form, "form%d", i);
+    client.print(F("<tr><td>"));
+    client.print(id);
+    client.print(F("</td><td>"));
+    client.print(pwmChannel[i].pin);
+    client.print(F("</td><td>"));
+    client.print(F("<form id =\""));
+    client.print(id);
+    client.print(F("\" formaction=\"get\" action=\"/"));
+    client.print(id);
+    client.print(F("\"><input type=\"hidden\" name=\"id\" value=\"1\" /></form></td><td>"));
+
+    // channel name input
+    client.print(F("<input form=\""));
+    client.print(id);
+    client.print(F("\" type=\"text\" name=\"chName\" value=\""));
+    client.print(pwmChannel[i].channelName);
+    client.print(F("\" /></td><td>"));
+
+
+    // frequency input
+    client.print(F("<input form=\""));
+    client.print(id);
+    client.print(F("\" type=\"text\" name=\"frequency\" value=\""));
+    client.print(pwmChannel[i].frequency);
+    client.print(F("\" /></td><td>"));
+
+
+    // resolution input
+    client.print(F("<input form=\""));
+    client.print(id);
+    client.print(F("\" type=\"text\" name=\"resolution\" value=\""));
+    client.print(pwmChannel[i].resolution);
+    client.print(F("\" /></td><td>"));
+
+
+    // duty input
+    client.print(F("<input form=\""));
+    client.print(id);
+    client.print(F("\" type=\"text\" name=\"duty\" value=\""));
+    client.print(pwmChannel[i].duty);
+    client.print(F("\" /></td><td>"));
+
+
+    // Update button
+    client.print(F("<input form=\""));
+    client.print(id);
+    client.print(F("\" type=\"submit\" value=\"Update\" /></td></tr>"));
+  }
+  client.print(F("</table></body></html>"));
+
+  // The HTTP response ends with another blank line
+  client.println();
+}
+
+
 
 void setup() {
   Serial.begin(115200);
@@ -251,12 +365,6 @@ void loop() {
           // if the current line is blank, you got two newline characters in a row.
           // that's the end of the client HTTP request, so send a response:
           if (currentLine.len == 0) {
-            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-            // and a content-type so the client knows what's coming, then a blank line:
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/html");
-            client.println("Connection: close");
-            client.println();
 
             Serial.println(header.buff);
 
@@ -280,108 +388,8 @@ void loop() {
               }
             }
 
+            sendResponseHTML(client);
 
-            // Display the HTML web page
-            client.println("<!DOCTYPE html><html>");
-            client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
-            client.println("<link rel=\"icon\" href=\"data:,\">");
-            // CSS to style the on/off buttons
-            // Feel free to change the background-color and font-size attributes to fit your preferences
-            client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}");
-            client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
-            client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
-            client.println(".button2 {background-color: #555555;}</style></head>");
-
-            // Web Page Heading
-            client.println("<body><h1>ESP32 Signal Generator</h1>");
-
-            // display a table of switches
-
-            client.println(F("<p>Switches</p>"));
-            client.println(F("<table><tr><th>id</th><th>Pin</th><th>State</th><th>Action</th></tr>"));
-            for (int i = 0; i < 8; i++) {
-              client.print(F("<tr><td>"));
-              client.print(switches[i].id);
-              client.print(F("</td><td>"));
-              client.print(switches[i].pin);
-              client.print(F("</td><td>"));
-              if (switches[i].state == 0x00) {
-                client.print(F("OFF"));
-              } else {
-                client.print(F("ON"));
-              }
-
-              // toggle button
-
-              client.print(F("</td><td>"));
-              client.print(F("<form action=\"/"));
-              client.print(switches[i].id);
-              client.print(F("/toggle\"><input type=\"submit\" value=\"Toggle\" formmethod=\"get\"></form>"));
-              client.println(F("</td></tr>"));
-            }
-            client.print(F("</table>"));
-
-
-            // display table of PWM channels
-            client.println(F("<p>PWM Channels</p>"));
-            client.println(F("<table><tr><th>id</th><th>Pin</th><th></th><th>Name</th><th>Frequency</th><th>Resolution</th><th>Duty</th><th>Action</th></tr>"));
-
-            // char form[8] = "";
-            for (int i = 0; i < 8; i++) {
-              char const * id = pwmChannel[i].id;
-              // sprintf(form, "form%d", i);
-              client.print(F("<tr><td>"));
-              client.print(id);
-              client.print(F("</td><td>"));
-              client.print(pwmChannel[i].pin);
-              client.print(F("</td><td>"));
-              client.print(F("<form id =\""));
-              client.print(id);
-              client.print(F("\" formaction=\"get\" action=\"/"));
-              client.print(id);
-              client.print(F("\"><input type=\"hidden\" name=\"id\" value=\"1\" /></form></td><td>"));
-
-              // channel name input
-              client.print(F("<input form=\""));
-              client.print(id);
-              client.print(F("\" type=\"text\" name=\"chName\" value=\""));
-              client.print(pwmChannel[i].channelName);
-              client.print(F("\" /></td><td>"));
-
-
-              // frequency input
-              client.print(F("<input form=\""));
-              client.print(id);
-              client.print(F("\" type=\"text\" name=\"frequency\" value=\""));
-              client.print(pwmChannel[i].frequency);
-              client.print(F("\" /></td><td>"));
-
-
-              // resolution input
-              client.print(F("<input form=\""));
-              client.print(id);
-              client.print(F("\" type=\"text\" name=\"resolution\" value=\""));
-              client.print(pwmChannel[i].resolution);
-              client.print(F("\" /></td><td>"));
-
-
-              // duty input
-              client.print(F("<input form=\""));
-              client.print(id);
-              client.print(F("\" type=\"text\" name=\"duty\" value=\""));
-              client.print(pwmChannel[i].duty);
-              client.print(F("\" /></td><td>"));
-
-
-              // Update button
-              client.print(F("<input form=\""));
-              client.print(id);
-              client.print(F("\" type=\"submit\" value=\"Update\" /></td></tr>"));
-            }
-            client.print(F("</table></body></html>"));
-
-            // The HTTP response ends with another blank line
-            client.println();
             // Break out of the while loop
             break;
           } else { // if you got a newline, then clear currentLine
