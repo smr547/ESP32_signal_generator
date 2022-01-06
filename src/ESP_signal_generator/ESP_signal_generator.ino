@@ -3,6 +3,8 @@
   Complete project details at http://randomnerdtutorials.com
 *********/
 
+#undef DEBUG
+
 // Load Wi-Fi library
 #include <WiFi.h>
 
@@ -91,9 +93,11 @@ uint8_t appendChar(Buffer &aBuff, const char c) {
 int16_t indexOf(Buffer &aBuff, const char * aString) {
   const char * ptr = strstr(aBuff.buff, aString);
 
+#ifdef DEBUG
   Serial.println("");
   Serial.printf("Checking for '%s' in '%s'\n", aString, aBuff.buff);
   Serial.printf("strstr return %d\n", (long) ptr);
+#endif //DEBUG
 
   if (ptr == NULL) {
     return -1;
@@ -133,10 +137,11 @@ int processPwmUpdate(Buffer &cmd, PwmState &pwms) {
   uint16_t r;     // resolution
   uint8_t d;      // duty
 
-
+#ifdef DEBUG
   Serial.print("Processing state change for PWM channel ");
   Serial.print(pwms.id);
   Serial.println("");
+#endif //DEBUG
 
   char * ptr = cmd.buff;
   char * field[5];
@@ -196,8 +201,7 @@ int processPwmUpdate(Buffer &cmd, PwmState &pwms) {
   return 0;
 }
 
-struct Buffer header = {"", BUFLEN - 1, 0};
-struct Buffer currentLine = {"", BUFLEN - 1, 0};
+
 
 
 // Current time
@@ -313,16 +317,45 @@ void sendResponseHTML(WiFiClient &client) {
     client.print(id);
     client.print(F("\" type=\"submit\" value=\"Update\" /></td></tr>"));
   }
-  client.print(F("</table></body></html>"));
+  client.print(F("</table><p>Full documentation and code at <a href=\"https://github.com/smr547/ESP32_signal_generator\">GitHub Repo</a></p></body></html>"));
+  
 
   // The HTTP response ends with another blank line
   client.println();
 }
 
+void processRequest(Buffer &header) {
+#ifdef DEBUG
+  Serial.println(header.buff);
+#endif //DEBUG
 
+  char buf[16];
+  for (int i = 0; i < 8; i++) {
+    sprintf(buf, "GET /%s/toggle", switches[i].id);
+    if (indexOf(header, buf) >= 0) {
+      switches[i].state = switches[i].state ^ 0x01;
+      digitalWrite(switches[i].pin, switches[i].state);
+      break;
+    }
+    sprintf(buf, "GET /%s?id=", pwmChannel[i].id);
+#ifdef DEBUG
+    Serial.printf("Checking for: ");
+    Serial.println(buf);
+#endif //DEBUG
+    if (indexOf(header, buf) >= 0) {
+      if (processPwmUpdate(header, pwmChannel[i]) == 0) {
+        // set PWM parameters
+        setPwmPin(pwmChannel[i]);
+      }
+      break;
+    }
+  }
+}
 
 void setup() {
+#ifdef DEBUG
   Serial.begin(115200);
+#endif //DEBUG
 
   // set switches
 
@@ -332,62 +365,55 @@ void setup() {
   }
 
   // Connect to Wi-Fi network with SSID and password
+#ifdef DEBUG
   Serial.print("Connecting to ");
   Serial.println(ssid);
+#endif //DEBUG
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
+#ifdef DEBUG
     Serial.print(".");
+#endif //DEBUG
   }
   // Print local IP address and start web server
+#ifdef DEBUG
   Serial.println("");
   Serial.println("WiFi connected.");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+#endif //DEBUG
   server.begin();
 }
 
 void loop() {
+  struct Buffer header = {"", BUFLEN - 1, 0};
+  struct Buffer currentLine = {"", BUFLEN - 1, 0};
+
   WiFiClient client = server.available();   // Listen for incoming clients
 
   if (client) {                             // If a new client connects,
     currentTime = millis();
     previousTime = currentTime;
+#ifdef DEBUG
     Serial.println("New Client.");          // print a message out in the serial port
+#endif //DEBUG
     clearBuff(currentLine);                // make a String to hold incoming data from the client
     while (client.connected() && currentTime - previousTime <= timeoutTime) {  // loop while the client's connected
       currentTime = millis();
       if (client.available()) {             // if there's bytes to read from the client,
         char c = client.read();             // read a byte, then
+#ifdef DEBUG
         Serial.write(c);                    // print it out the serial monitor
+#endif //DEBUG
         appendChar(header, c);
         if (c == '\n') {                    // if the byte is a newline character
           // if the current line is blank, you got two newline characters in a row.
           // that's the end of the client HTTP request, so send a response:
           if (currentLine.len == 0) {
 
-            Serial.println(header.buff);
 
-            char buf[16];
-            for (int i = 0; i < 8; i++) {
-              sprintf(buf, "GET /%s/toggle", switches[i].id);
-              if (indexOf(header, buf) >= 0) {
-                switches[i].state = switches[i].state ^ 0x01;
-                digitalWrite(switches[i].pin, switches[i].state);
-                break;
-              }
-              sprintf(buf, "GET /%s?id=", pwmChannel[i].id);
-              Serial.printf("Checking for: ");
-              Serial.println(buf);
-              if (indexOf(header, buf) >= 0) {
-                if (processPwmUpdate(header, pwmChannel[i]) == 0) {
-                  // set PWM parameters
-                  setPwmPin(pwmChannel[i]);
-                }
-                break;
-              }
-            }
-
+            processRequest(header);
             sendResponseHTML(client);
 
             // Break out of the while loop
@@ -404,7 +430,9 @@ void loop() {
     clearBuff(header);
     // Close the connection
     client.stop();
+#ifdef DEBUG
     Serial.println("Client disconnected.");
     Serial.println("");
+#endif //DEBUG
   }
 }
