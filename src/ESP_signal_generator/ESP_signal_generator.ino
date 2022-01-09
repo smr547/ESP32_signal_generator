@@ -1,9 +1,16 @@
 /*********
-  Rui Santos
-  Complete project details at http://randomnerdtutorials.com
+Signal generator running on ESP32 dev board. Provides:
+
+ 8 x PWM channels
+ 8 x digital switch channels
+ 2 x DAC outputs
+ Control panel web page
+
+Steven Ring, Dec, 2021
 *********/
 
 #undef DEBUG
+// #define DEBUG 1
 
 // Load Wi-Fi library
 #include <WiFi.h>
@@ -61,13 +68,15 @@ struct PwmState pwmChannel[] = {
 
 struct DacState {
   const uint8_t channel;
+  char const * id;
+  char channelName[CHNLEN];
   const uint8_t pin;
   uint8_t value;
 };
 
 struct DacState dacChannel[] = {
-  {0, 25, 0},
-  {1, 26, 0}
+  {0, "A0", 25, 0},
+  {1, "A1", 26, 0}
 };
 
 
@@ -201,6 +210,70 @@ int processPwmUpdate(Buffer &cmd, PwmState &pwms) {
   return 0;
 }
 
+int processDacUpdate(Buffer &cmd, DacState &dacs) {
+  // locate all the required parameters
+  // ensure they are present and in range
+  // update the state table entry
+  // adjust the hardware settings
+
+  // return 0 if OK, or
+  // return positive error number
+
+
+  // locate all required paremeters
+
+  char * chName;  // channel name
+  uint8_t value;  // value
+
+#ifdef DEBUG
+  Serial.print("Processing state change for DAC channel ");
+  Serial.print(dacs.id);
+  Serial.println("");
+#endif //DEBUG
+
+  char * ptr = cmd.buff;
+  char * field[5];
+  for (int i = 0; i < 3; i++) {
+    // look for next "=" delimiter
+    ptr = strstr(ptr, "=");
+    if (ptr == NULL) {
+      return i * 2 + 1;
+    }
+    ptr++;
+    field[i] = ptr;
+  }
+
+  chName = field[1];
+
+  // 0 <= value <= 255
+
+  value = atoi(field[2]);
+
+  if (value < 0) {
+    value = 0;
+  }
+  if (value > 255) {
+    value = 255;
+  }
+
+
+  // copy channel name
+
+  for (int i = 0; i < (CHNLEN - 1); i++) {
+    if (chName[i] == '\0' || chName[i] == '&') {
+      break;
+    }
+    dacs.channelName[i] = chName[i];
+    dacs.channelName[i + 1] = '\0';
+  }
+
+  // copy in integer parameters
+
+  dacs.value = value;
+
+  return 0;
+}
+
 
 
 
@@ -226,17 +299,18 @@ void sendResponseHTML(WiFiClient &client) {
   client.println("<link rel=\"icon\" href=\"data:,\">");
   // CSS to style the on/off buttons
   // Feel free to change the background-color and font-size attributes to fit your preferences
-  client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}");
-  client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
-  client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
-  client.println(".button2 {background-color: #555555;}</style></head>");
+  client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: left;}");
+  // client.println(".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px;");
+  // client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
+  //client.println(".button2 {background-color: #555555;}</style></head>");
+  client.println("</style></head>");
 
   // Web Page Heading
   client.println("<body><h1>ESP32 Signal Generator</h1>");
 
   // display a table of switches
 
-  client.println(F("<p>Switches</p>"));
+  client.println(F("<h2>Switches</h2>"));
   client.println(F("<table><tr><th>id</th><th>Pin</th><th>State</th><th>Action</th></tr>"));
   for (int i = 0; i < 8; i++) {
     client.print(F("<tr><td>"));
@@ -260,9 +334,8 @@ void sendResponseHTML(WiFiClient &client) {
   }
   client.print(F("</table>"));
 
-
   // display table of PWM channels
-  client.println(F("<p>PWM Channels</p>"));
+  client.println(F("<h2>PWM Channels</h2>"));
   client.println(F("<table><tr><th>id</th><th>Pin</th><th></th><th>Name</th><th>Frequency</th><th>Resolution</th><th>Duty</th><th>Action</th></tr>"));
 
   // char form[8] = "";
@@ -317,6 +390,47 @@ void sendResponseHTML(WiFiClient &client) {
     client.print(id);
     client.print(F("\" type=\"submit\" value=\"Update\" /></td></tr>"));
   }
+  client.print(F("</table>"));
+
+  // display table of DAC channels
+  client.println(F("<h2>DAC Channels</h2>"));
+  client.println(F("<table><tr><th>id</th><th>Pin</th><th></th><th>Name</th><th>Value</th><th>Action</th></tr>"));
+
+  for (int i = 0; i < 2; i++) {
+    char const * id = dacChannel[i].id;
+    client.print(F("<tr><td>"));
+    client.print(id);
+    client.print(F("</td><td>"));
+    client.print(pwmChannel[i].pin);
+    client.print(F("</td><td>"));
+    
+    client.print(F("<form id =\""));
+    client.print(id);
+    client.print(F("\" formaction=\"get\" action=\"/"));
+    client.print(id);
+    client.print(F("\"><input type=\"hidden\" name=\"id\" value=\"1\" /></form></td><td>"));
+
+    // channel name input
+    client.print(F("<input form=\""));
+    client.print(id);
+    client.print(F("\" type=\"text\" name=\"chName\" value=\""));
+    client.print(dacChannel[i].channelName);
+    client.print(F("\" /></td><td>"));
+
+
+    // value input
+    client.print(F("<input form=\""));
+    client.print(id);
+    client.print(F("\" type=\"text\" name=\"value\" value=\""));
+    client.print(dacChannel[i].value);
+    client.print(F("\" /></td><td>"));
+
+    // Update button
+    client.print(F("<input form=\""));
+    client.print(id);
+    client.print(F("\" type=\"submit\" value=\"Update\" /></td></tr>"));
+  }
+
   client.print(F("</table><p>Full documentation and code at <a href=\"https://github.com/smr547/ESP32_signal_generator\">GitHub Repo</a></p></body></html>"));
   
 
@@ -330,6 +444,9 @@ void processRequest(Buffer &header) {
 #endif //DEBUG
 
   char buf[16];
+
+  // check switches
+
   for (int i = 0; i < 8; i++) {
     sprintf(buf, "GET /%s/toggle", switches[i].id);
     if (indexOf(header, buf) >= 0) {
@@ -337,6 +454,11 @@ void processRequest(Buffer &header) {
       digitalWrite(switches[i].pin, switches[i].state);
       break;
     }
+  }
+
+  // check PWM
+
+  for (int i = 0; i < 8; i++) {
     sprintf(buf, "GET /%s?id=", pwmChannel[i].id);
 #ifdef DEBUG
     Serial.printf("Checking for: ");
@@ -350,6 +472,24 @@ void processRequest(Buffer &header) {
       break;
     }
   }
+
+  // check DACs
+  
+  for (int i = 0; i < 2; i++) {
+    sprintf(buf, "GET /%s?id=", dacChannel[i].id);
+#ifdef DEBUG
+    Serial.printf("Checking for: ");
+    Serial.println(buf);
+#endif //DEBUG
+    if (indexOf(header, buf) >= 0) {
+      if (processDacUpdate(header, dacChannel[i]) == 0) {
+        // set DAC parameters
+        setDacPin(dacChannel[i]);
+      }
+      break;
+    }
+  }
+
 }
 
 void setup() {
