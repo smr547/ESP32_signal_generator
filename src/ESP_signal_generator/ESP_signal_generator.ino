@@ -10,7 +10,7 @@ Steven Ring, Dec, 2021
 *********/
 
 #undef DEBUG
-// #define DEBUG 1
+//#define DEBUG 1
 
 // Load Wi-Fi library
 #include <WiFi.h>
@@ -65,6 +65,8 @@ struct PwmState pwmChannel[] = {
 };
 
 // Two DAC channels
+#define DAC1 25
+#define DAC2 26
 
 struct DacState {
   const uint8_t channel;
@@ -75,8 +77,8 @@ struct DacState {
 };
 
 struct DacState dacChannel[] = {
-  {0, "A0", 25, 0},
-  {1, "A1", 26, 0}
+  {0,  "DAC1", "", DAC1, 0},
+  {1,  "DAC2", "", DAC2, 0}
 };
 
 
@@ -120,6 +122,11 @@ void clearBuff(Buffer &aBuff) {
 }
 
 void setDacPin(DacState &ds) {
+
+  #ifdef DEBUG
+  Serial.println("");
+  Serial.printf("Setting DAC pin '%d' to %d\n", ds.pin, ds.value);
+#endif //DEBUG
   dacWrite(ds.pin, ds.value);
 }
 
@@ -394,14 +401,14 @@ void sendResponseHTML(WiFiClient &client) {
 
   // display table of DAC channels
   client.println(F("<h2>DAC Channels</h2>"));
-  client.println(F("<table><tr><th>id</th><th>Pin</th><th></th><th>Name</th><th>Value</th><th>Action</th></tr>"));
+  client.println(F("<table><tr><th>id</th><th>Pin</th><th></th><th>Name</th><th>0->3.3V</th><th>Action</th></tr>"));
 
   for (int i = 0; i < 2; i++) {
     char const * id = dacChannel[i].id;
     client.print(F("<tr><td>"));
     client.print(id);
     client.print(F("</td><td>"));
-    client.print(pwmChannel[i].pin);
+    client.print(dacChannel[i].pin);
     client.print(F("</td><td>"));
     
     client.print(F("<form id =\""));
